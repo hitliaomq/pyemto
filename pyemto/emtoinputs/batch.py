@@ -13,6 +13,7 @@ import os
 import datetime
 import re
 import pyemto.common.common as common
+from monty.os.path import which
 
 class Batch:
     """Creates a batch script for running KGRN and KFCD calculations on a
@@ -42,7 +43,7 @@ class Batch:
 
     def __init__(self, jobname=None, runtime=None, EMTOdir=None,
                  emtopath=None, runKGRN=None, runKFCD=None,
-                 account=None, KGRN_file_type=None, KFCD_file_type=None,
+                 account="open", KGRN_file_type=None, KFCD_file_type=None,
                  slurm_options=None, parallel=None, queue_type="pbs", 
                  pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
 
@@ -81,19 +82,16 @@ class Batch:
 
         line = "#!/bin/bash" + "\n" + "\n"
         if queue_type == "pbs":
-            line += "#PBS -N " + self.jobname + "\n"
+            pbsjobname = self.jobname
+            if len(pbsjobname) > 15:
+                pbsjobname = pbsjobname[0:15]
+            line += "#PBS -N " + pbsjobname + "\n"
             line += "#PBS -l nodes=" + str(int(pbs_options["node"])) + ":ppn=" + str(int(pbs_options["ncore"])) +"\n"
             line += "#PBS -l walltime=" + self.runtime + "\n"
             line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
             line += "#PBS -A {0}".format(self.account) + "\n"
             line += "#PBS -q open\n"
-            line += "#PBS -o " + \
-                common.cleanup_path(
-                    self.emtopath + "/" + self.jobname) + ".output" + "\n"
-            line += "#PBS -e " + \
-                common.cleanup_path(
-                    self.emtopath + "/" + self.jobname) + ".error" + "\n"
-            line += "\n"
+            line += "#PBS -oe \n\n"
             line += "cd $PBS_O_WORKDIR"
             line += "\n"
             for dep_module in pbs_options["module"]:
@@ -109,6 +107,12 @@ class Batch:
                     self.emtopath + "/" + self.jobname) + ".error" + "\n"
             if self.account is not None:
                 line += "#SBATCH -A {0}".format(self.account) + "\n"
+            if self.slurm_options is not None:
+                for so in self.slurm_options:
+                    line += so + "\n"
+        else:
+            print("It will run local, using bash.")
+            pass
         
         self.use_module = False
         if self.slurm_options is not None:
@@ -116,8 +120,6 @@ class Batch:
                 if 'module load emto' in tmp:
                     self.use_module = True
                     break
-            for so in self.slurm_options:
-                line += so + "\n"
         line += "\n"
 
         #elapsed_time = "/usr/bin/time "
@@ -129,9 +131,11 @@ class Batch:
             kgrn_exe = 'kgrn_cpa'
             kfcd_exe = 'kfcd_cpa'
 
+        if which(kgrn_exe) is not None:
+            self.use_module = True
         if not self.use_module:
-            KGRN_path = self.EMTOdir + "/kgrn/source/"
-            KFCD_path = self.EMTOdir + "/kfcd/source/"
+            KGRN_path = self.EMTOdir + "/bin/"
+            KFCD_path = self.EMTOdir + "/bin/"
         else:
             KGRN_path = ""
             KFCD_path = ""

@@ -10,6 +10,7 @@ Created on Wed Dec  3 15:09:24 2014
 from __future__ import print_function
 import sys
 import pyemto.common.common as common
+from monty.os.path import which
 
 
 class Batch:
@@ -47,7 +48,7 @@ class Batch:
     def __init__(self, jobname_lat=None, lat=None, runtime=None, latpath=None,
                  EMTOdir=None, runBMDL=None, runKSTR=None, runKSTR2=None,
                  runSHAPE=None, kappaw=None, kappalen=None,
-                 slurm_options=None, account=None, queue_type="pbs", 
+                 slurm_options=None, account="open", queue_type="pbs", 
                  pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
 
         # Batch script related parameters
@@ -85,19 +86,16 @@ class Batch:
 
         line = "#!/bin/bash" + "\n" + "\n"
         if queue_type == "pbs":
-            line += "#PBS -N " + self.jobname + "\n"
+            pbsjobname = self.jobname_lat
+            if len(pbsjobname) > 15:
+                pbsjobname = pbsjobname[0:15]
+            line += "#PBS -N " + pbsjobname + "\n"
             line += "#PBS -l nodes=1:ppn=1\n"
             line += "#PBS -l walltime=" + self.runtime + "\n"
             line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
             line += "#PBS -A {0}".format(self.account) + "\n"
             line += "#PBS -q open\n"
-            line += "#PBS -o " + \
-                common.cleanup_path(
-                    self.emtopath + "/" + self.jobname) + ".output" + "\n"
-            line += "#PBS -e " + \
-                common.cleanup_path(
-                    self.emtopath + "/" + self.jobname) + ".error" + "\n"
-            line += "\n"
+            line += "#PBS -oe \n\n"
             line += "cd $PBS_O_WORKDIR"
             line += "\n"
             for dep_module in pbs_options["module"]:
@@ -113,6 +111,13 @@ class Batch:
                     self.latpath + "/" + self.jobname_lat) + ".error" + "\n"
             if self.account is not None:
                 line += "#SBATCH -A {0}".format(self.account) + "\n"
+            if self.slurm_options is not None:
+                for so in self.slurm_options:
+                    # Do not use more than one CPU for the structure calculations
+                    if "#SBATCH -n " in so:
+                        pass
+                    else:
+                        line += so + "\n"
 
         self.use_module = False
         if self.slurm_options is not None:
@@ -120,21 +125,17 @@ class Batch:
                 if 'module load emto' in tmp:
                     self.use_module = True
                     break
-            for so in self.slurm_options:
-                # Do not use more than one CPU for the structure calculations
-                if "#SBATCH -n " in so:
-                    pass
-                else:
-                    line += so + "\n"
+        if which("bmdl") is not None:
+            self.use_module = True
         line += "\n"
 
         #elapsed_time = "/usr/bin/time "
         elapsed_time = ""
 
         if not self.use_module:
-            BMDL_path = self.EMTOdir + "/bmdl/source/bmdl"
-            KSTR_path = self.EMTOdir + "/kstr/source/kstr"
-            SHAPE_path = self.EMTOdir + "/shape/source/shape"
+            BMDL_path = self.EMTOdir + "/bin/bmdl"
+            KSTR_path = self.EMTOdir + "/bin/kstr"
+            SHAPE_path = self.EMTOdir + "/bin/shape"
         else:
             BMDL_path = "bmdl"
             KSTR_path = "kstr"

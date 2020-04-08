@@ -468,7 +468,7 @@ class EMTOPARSER(object):
             Sconf = -kb*np.sum(np.log(self.main_df.Conc[1])*self.main_df.Conc[1],axis=1)
             self.Sconf_df = pd.DataFrame(Sconf,columns=["Sconf"])
         elif self.DLM == True:
-            Sconf = -kb*np.sum(np.log(2*self.main_df.Conc[1].ix[:,::2])*2*self.main_df.Conc[1].ix[:,::2],axis=1)
+            Sconf = -kb*np.sum(np.log(2*self.main_df.Conc[1].iloc[:,::2])*2*self.main_df.Conc[1].iloc[:,::2],axis=1)
             self.Sconf_df = pd.DataFrame(Sconf,columns=["Sconf"])
         
         #calculate Magnetic Entropy
@@ -476,7 +476,7 @@ class EMTOPARSER(object):
             Smag = kb*np.sum(np.log(np.abs(self.main_df.Mag[1])+1.)*self.main_df.Conc[1],axis=1)
             self.Smag_df = pd.DataFrame(Smag,columns=["Smag"])
         elif self.DLM == True:
-            Smag = kb*np.sum(np.log(np.abs(self.main_df.Mag[1].ix[:,::2])+1.)*2*self.main_df.Conc[1].ix[:,::2],axis=1)
+            Smag = kb*np.sum(np.log(np.abs(self.main_df.Mag[1].iloc[:,::2])+1.)*2*self.main_df.Conc[1].iloc[:,::2],axis=1)
             self.Smag_df = pd.DataFrame(Smag,columns=["Smag"])
 
         if self.KGRN_filenames is not None:

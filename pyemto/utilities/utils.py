@@ -67,8 +67,7 @@ def run_bash(cmd):
     return out  # This is the stdout from the shell command
 
 
-def write_batch(folder, jobname, queue_type="pbs", 
-                 pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
+def write_batch(folder, jobname, queue_type="pbs"):
     """
 
     :param folder: Folder to write batch file
@@ -82,19 +81,19 @@ def write_batch(folder, jobname, queue_type="pbs",
     # Writes a SLURM batch script for the job
     line = "#!/bin/bash" + "\n" + "\n"
     if queue_type == "pbs":
-            line += "#PBS -N " + self.jobname + "\n"
-            line += "#PBS -l nodes=1:ppn=1\n"
-            line += "#PBS -l walltime=" + self.runtime + "\n"
-            line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
-            line += "#PBS -A {0}".format(self.account) + "\n"
-            line += "#PBS -q open\n"
-            line += "#PBS -o {0}.output".format(jobname) + "\n"
-            line += "#PBS -e {0}.error".format(jobname) + "\n"
-            line += "\n"
-            line += "cd $PBS_O_WORKDIR"
-            line += "\n"
-            for dep_module in pbs_options["module"]:
-                line += "module load " + dep_module + "\n"
+        if len(jobname) > 15:
+            pbsjobname = jobname[0:15]
+        line += "#PBS -N " + pbsjobname + "\n"
+        line += "#PBS -N " + jobname + "\n"
+        line += "#PBS -l nodes=1:ppn=1\n"
+        line += "#PBS -l walltime=01:00:00\n"
+        line += "#PBS -l pmem=8gb\n"
+        line += "#PBS -A open\n"
+        line += "#PBS -q open\n"
+        line += "#PBS -oe \n\n"
+        line += "\n"
+        line += "cd $PBS_O_WORKDIR"
+        line += "\n"
     elif queue_type == "slurm":
         line = line + "#SBATCH -J {0}".format(jobname) + "\n"
         line = line + "#SBATCH -t 01:00:00" + "\n"
