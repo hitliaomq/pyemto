@@ -13,6 +13,7 @@ import os
 import datetime
 import re
 import pyemto.common.common as common
+from pyemto.latticeinputs.batch import batch_head
 from monty.os.path import which
 
 class Batch:
@@ -43,9 +44,9 @@ class Batch:
 
     def __init__(self, jobname=None, runtime=None, EMTOdir=None,
                  emtopath=None, runKGRN=None, runKFCD=None,
-                 account="open", KGRN_file_type=None, KFCD_file_type=None,
+                 account="open", KGRN_file_type="scf", KFCD_file_type="fcd",
                  slurm_options=None, parallel=None, queue_type="pbs", 
-                 pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
+                 queue_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
 
         # Batch script related parameters
         self.jobname = jobname
@@ -66,7 +67,7 @@ class Batch:
         self.slurm_options = slurm_options
         self.parallel = parallel
         self.queue_type = queue_type.lower()
-        self.pbs_options = pbs_options
+        self.queue_options = queue_options
         self.use_module = False
         return
 
@@ -78,41 +79,12 @@ class Batch:
         :rtype: str
         """
         queue_type = self.queue_type
-        pbs_options = self.pbs_options
+        queue_options = self.queue_options
+        jobname = self.jobname
+        emtopath = self.emtopath
 
-        line = "#!/bin/bash" + "\n" + "\n"
-        if queue_type == "pbs":
-            pbsjobname = self.jobname
-            if len(pbsjobname) > 15:
-                pbsjobname = pbsjobname[0:15]
-            line += "#PBS -N " + pbsjobname + "\n"
-            line += "#PBS -l nodes=" + str(int(pbs_options["node"])) + ":ppn=" + str(int(pbs_options["ncore"])) +"\n"
-            line += "#PBS -l walltime=" + self.runtime + "\n"
-            line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
-            line += "#PBS -A {0}".format(self.account) + "\n"
-            line += "#PBS -q open\n"
-            line += "#PBS -oe \n\n"
-            line += "cd $PBS_O_WORKDIR"
-            line += "\n"
-            for dep_module in pbs_options["module"]:
-                line += "module load " + dep_module + "\n"
-        elif queue_type == "slurm":
-            line += "#SBATCH -J " + self.jobname + "\n"
-            line += "#SBATCH -t " + self.runtime + "\n"
-            line += "#SBATCH -o " + \
-                common.cleanup_path(
-                    self.emtopath + "/" + self.jobname) + ".output" + "\n"
-            line += "#SBATCH -e " + \
-                common.cleanup_path(
-                    self.emtopath + "/" + self.jobname) + ".error" + "\n"
-            if self.account is not None:
-                line += "#SBATCH -A {0}".format(self.account) + "\n"
-            if self.slurm_options is not None:
-                for so in self.slurm_options:
-                    line += so + "\n"
-        else:
-            print("It will run local, using bash.")
-            pass
+        line = batch_head(jobname=jobname, latpath=emtopath, runtime=self.runtime, 
+                 account=self.account, queue_type=queue_type, queue_options=queue_options)
         
         self.use_module = False
         if self.slurm_options is not None:
@@ -122,32 +94,29 @@ class Batch:
                     break
         line += "\n"
 
+        sub_module = ["kgrn_cpa", "kfcd_cpa"]
+        sub_module_run = [self.runKGRN, self.runKFCD]
+        file_type = [self.KGRN_file_type, self.KFCD_file_type]
+        output_file_ext = ["kgrn", "kfcd"]
+
         #elapsed_time = "/usr/bin/time "
         elapsed_time = ""
         if self.parallel is True:
-            kgrn_exe = 'kgrn_omp'
-            kfcd_exe = 'kfcd_cpa'
-        else:
-            kgrn_exe = 'kgrn_cpa'
-            kfcd_exe = 'kfcd_cpa'
+            sub_module = ["kgrn_omp", "kfcd_cpa"]
 
-        if which(kgrn_exe) is not None:
+        if which("kfcd_cpa") is not None:
             self.use_module = True
         if not self.use_module:
-            KGRN_path = self.EMTOdir + "/bin/"
-            KFCD_path = self.EMTOdir + "/bin/"
+            module_path = [os.path.join(self.EMTOdir, module_i) for module_i in sub_module]
         else:
-            KGRN_path = ""
-            KFCD_path = ""
+            module_path = sub_module
 
-        if self.runKGRN:
-            line += elapsed_time + common.cleanup_path(KGRN_path + kgrn_exe + " < ") +\
-                    common.cleanup_path(self.emtopath + "/" + self.jobname) + ".{0} > ".format(self.KGRN_file_type) +\
-                    common.cleanup_path(self.emtopath + "/" + self.jobname) + "_kgrn.output" + "\n"
-        if self.runKFCD:
-            line += elapsed_time + common.cleanup_path(KFCD_path + kfcd_exe + " < ") +\
-                common.cleanup_path(self.emtopath + "/" + self.jobname) + ".{0} > ".format(self.KFCD_file_type) +\
-                common.cleanup_path(self.emtopath + "/" + self.jobname) + "_kfcd.output" + "\n"
+        for i in range(0, len(sub_module)):
+            if sub_module_run[i]:
+                runStr = [elapsed_time, module_path[i], "<", 
+                         os.path.join(emtopath, jobname + "." + file_type[i]), ">",
+                         os.path.join(emtopath, jobname + "_" + output_file_ext[i] + ".output")]
+                line += " ".join(runStr).strip() + "\n"
 
         return line
 

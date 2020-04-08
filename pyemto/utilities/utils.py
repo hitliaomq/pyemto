@@ -91,7 +91,6 @@ def write_batch(folder, jobname, queue_type="pbs"):
         line += "#PBS -A open\n"
         line += "#PBS -q open\n"
         line += "#PBS -oe \n\n"
-        line += "\n"
         line += "cd $PBS_O_WORKDIR"
         line += "\n"
     elif queue_type == "slurm":

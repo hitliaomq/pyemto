@@ -9,9 +9,48 @@ Created on Wed Dec  3 15:09:24 2014
 
 from __future__ import print_function
 import sys
+import os
 import pyemto.common.common as common
 from monty.os.path import which
 
+def batch_head(jobname, latpath="./", runtime="24:00:00", account="open", queue_type="pbs", 
+    queue_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
+    
+    line = "#!/bin/bash" + "\n" + "\n"
+    if queue_type == "pbs":
+        pbsjobname = jobname
+        if len(pbsjobname) > 15:
+            pbsjobname = pbsjobname[0:15]
+        line += "#PBS -N " + pbsjobname + "\n"
+        line += "#PBS -l nodes=1:ppn=1\n"
+        line += "#PBS -l walltime=" + runtime + "\n"
+        line += "#PBS -l pmem=" + queue_options["pmem"] + "\n"
+        line += "#PBS -A {0}".format(account) + "\n"
+        line += "#PBS -q open\n"
+        line += "#PBS -j oe \n\n"
+        line += "cd $PBS_O_WORKDIR"
+        line += "\n"
+        for dep_module in queue_options["module"]:
+            line += "module load " + dep_module + "\n"
+    elif queue_type == "slurm":
+        line += "#SBATCH -J " + jobname + "\n"
+        line += "#SBATCH -t " + runtime + "\n"
+        line += "#SBATCH -o " + \
+            common.cleanup_path(
+                latpath + "/" + jobname) + ".output" + "\n"
+        line += "#SBATCH -e " + \
+            common.cleanup_path(
+                latpath + "/" + jobname) + ".error" + "\n"
+        if account is not None:
+            line += "#SBATCH -A {0}".format(account) + "\n"
+        if queue_options is not None:
+            for so in queue_options:
+                # Do not use more than one CPU for the structure calculations
+                if "#SBATCH -n " in so:
+                    pass
+                else:
+                    line += so + "\n"
+    return line
 
 class Batch:
     """Creates a batch script for running BMDL, KSTR and SHAPE calculations
@@ -49,7 +88,7 @@ class Batch:
                  EMTOdir=None, runBMDL=None, runKSTR=None, runKSTR2=None,
                  runSHAPE=None, kappaw=None, kappalen=None,
                  slurm_options=None, account="open", queue_type="pbs", 
-                 pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
+                 queue_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
 
         # Batch script related parameters
         self.jobname_lat = jobname_lat
@@ -66,7 +105,7 @@ class Batch:
         self.account = account
         self.slurm_options = slurm_options
         self.queue_type = queue_type.lower()
-        self.pbs_options = pbs_options
+        self.queue_options = queue_options
         self.use_module = False
         #print('BMDL self.slurm_options = ',self.slurm_options)
 
@@ -82,42 +121,16 @@ class Batch:
         # Clean up path names
 
         queue_type = self.queue_type
-        pbs_options = self.pbs_options
+        queue_options = self.queue_options
+        jobname = self.jobname_lat
+        latpath = self.latpath
 
-        line = "#!/bin/bash" + "\n" + "\n"
-        if queue_type == "pbs":
-            pbsjobname = self.jobname_lat
-            if len(pbsjobname) > 15:
-                pbsjobname = pbsjobname[0:15]
-            line += "#PBS -N " + pbsjobname + "\n"
-            line += "#PBS -l nodes=1:ppn=1\n"
-            line += "#PBS -l walltime=" + self.runtime + "\n"
-            line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
-            line += "#PBS -A {0}".format(self.account) + "\n"
-            line += "#PBS -q open\n"
-            line += "#PBS -oe \n\n"
-            line += "cd $PBS_O_WORKDIR"
-            line += "\n"
-            for dep_module in pbs_options["module"]:
-                line += "module load " + dep_module + "\n"
-        elif queue_type == "slurm":
-            line += "#SBATCH -J " + self.jobname_lat + "\n"
-            line += "#SBATCH -t " + self.runtime + "\n"
-            line += "#SBATCH -o " + \
-                common.cleanup_path(
-                    self.latpath + "/" + self.jobname_lat) + ".output" + "\n"
-            line += "#SBATCH -e " + \
-                common.cleanup_path(
-                    self.latpath + "/" + self.jobname_lat) + ".error" + "\n"
-            if self.account is not None:
-                line += "#SBATCH -A {0}".format(self.account) + "\n"
-            if self.slurm_options is not None:
-                for so in self.slurm_options:
-                    # Do not use more than one CPU for the structure calculations
-                    if "#SBATCH -n " in so:
-                        pass
-                    else:
-                        line += so + "\n"
+        line = batch_head(jobname=jobname, latpath=latpath, runtime=self.runtime, 
+                 account=self.account, queue_type=queue_type, queue_options=queue_options)
+
+        sub_module = ["bmdl", "kstr", "kstr", "shape"]
+        sub_module_run = [self.runBMDL, self.runKSTR, self.runKSTR2, self.runSHAPE]
+        jobname_m = [jobname, jobname, jobname + "M", jobname]
 
         self.use_module = False
         if self.slurm_options is not None:
@@ -133,33 +146,16 @@ class Batch:
         elapsed_time = ""
 
         if not self.use_module:
-            BMDL_path = self.EMTOdir + "/bin/bmdl"
-            KSTR_path = self.EMTOdir + "/bin/kstr"
-            SHAPE_path = self.EMTOdir + "/bin/shape"
+            module_path = [os.path.join(self.EMTOdir, module_i) for module_i in sub_module]
         else:
-            BMDL_path = "bmdl"
-            KSTR_path = "kstr"
-            SHAPE_path = "shape"
-        if self.runBMDL:
-            line += elapsed_time + common.cleanup_path(BMDL_path + " < ") +\
-                common.cleanup_path(self.latpath + "/" + self.jobname_lat) + ".bmdl > " +\
-                common.cleanup_path(
-                    self.latpath + "/" + self.jobname_lat) + "_bmdl.output" + "\n"
-        if self.runKSTR:
-            line += elapsed_time + common.cleanup_path(KSTR_path + " < ") +\
-                common.cleanup_path(self.latpath + "/" + self.jobname_lat) + ".kstr > " +\
-                common.cleanup_path(
-                    self.latpath + "/" + self.jobname_lat) + "_kstr.output" + "\n"
-        if self.runKSTR2:
-            line += elapsed_time + common.cleanup_path(KSTR_path + " < ") +\
-                common.cleanup_path(self.latpath + "/" + self.jobname_lat) + 'M' + ".kstr > " +\
-                common.cleanup_path(
-                    self.latpath + "/" + self.jobname_lat) + 'M' + "_kstr.output" + "\n"
-        if self.runSHAPE:
-            line += elapsed_time + common.cleanup_path(SHAPE_path + " < ") +\
-                common.cleanup_path(self.latpath + "/" + self.jobname_lat) + ".shape > " +\
-                common.cleanup_path(
-                    self.latpath + "/" + self.jobname_lat) + "_shape.output" + "\n"
+            module_path = sub_module
+
+        for i in range(0, len(sub_module)):
+            if sub_module_run[i]:
+                runStr = [elapsed_time, module_path[i], "<", 
+                         os.path.join(latpath, jobname_m[i] + "." + sub_module[i]), ">",
+                         os.path.join(latpath, jobname_m[i] + "_" + sub_module[i] + ".output")]
+                line += " ".join(runStr).strip() + "\n"
 
         return line
 
