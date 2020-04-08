@@ -5,6 +5,7 @@ def create_submit_all_script():
     import os
     import sys
     #
+    queue_type = "pbs"
     def run_bash(cmd):
         # Runs a bash command and returns the output
         import subprocess
@@ -41,7 +42,10 @@ def create_submit_all_script():
     #submit_lines += 'done' + '\n'
     #
     for i in range(len(all_slurm_files)):
-        submit_lines += 'cd {0}; sbatch {1}\n'.format(all_slurm_file_folders[i],all_slurm_files[i])
+        if queue_type == "pbs":
+            submit_lines += 'cd {0}; qsub {1}\n'.format(all_slurm_file_folders[i],all_slurm_files[i])
+        elif queue_type == "slurm":
+            submit_lines += 'cd {0}; sbatch {1}\n'.format(all_slurm_file_folders[i],all_slurm_files[i])
     #
     for line in submit_lines:
         submit_script.write(line)

@@ -47,7 +47,8 @@ class Batch:
     def __init__(self, jobname_lat=None, lat=None, runtime=None, latpath=None,
                  EMTOdir=None, runBMDL=None, runKSTR=None, runKSTR2=None,
                  runSHAPE=None, kappaw=None, kappalen=None,
-                 slurm_options=None, account=None):
+                 slurm_options=None, account=None, queue_type="pbs", 
+                 pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
 
         # Batch script related parameters
         self.jobname_lat = jobname_lat
@@ -63,6 +64,8 @@ class Batch:
         self.kappalen = kappalen
         self.account = account
         self.slurm_options = slurm_options
+        self.queue_type = queue_type.lower()
+        self.pbs_options = pbs_options
         self.use_module = False
         #print('BMDL self.slurm_options = ',self.slurm_options)
 
@@ -77,17 +80,39 @@ class Batch:
 
         # Clean up path names
 
+        queue_type = self.queue_type
+        pbs_options = self.pbs_options
+
         line = "#!/bin/bash" + "\n" + "\n"
-        line += "#SBATCH -J " + self.jobname_lat + "\n"
-        line += "#SBATCH -t " + self.runtime + "\n"
-        line += "#SBATCH -o " + \
-            common.cleanup_path(
-                self.latpath + "/" + self.jobname_lat) + ".output" + "\n"
-        line += "#SBATCH -e " + \
-            common.cleanup_path(
-                self.latpath + "/" + self.jobname_lat) + ".error" + "\n"
-        if self.account is not None:
-            line += "#SBATCH -A {0}".format(self.account) + "\n"
+        if queue_type == "pbs":
+            line += "#PBS -N " + self.jobname + "\n"
+            line += "#PBS -l nodes=1:ppn=1\n"
+            line += "#PBS -l walltime=" + self.runtime + "\n"
+            line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
+            line += "#PBS -A {0}".format(self.account) + "\n"
+            line += "#PBS -q open\n"
+            line += "#PBS -o " + \
+                common.cleanup_path(
+                    self.emtopath + "/" + self.jobname) + ".output" + "\n"
+            line += "#PBS -e " + \
+                common.cleanup_path(
+                    self.emtopath + "/" + self.jobname) + ".error" + "\n"
+            line += "\n"
+            line += "cd $PBS_O_WORKDIR"
+            line += "\n"
+            for dep_module in pbs_options["module"]:
+                line += "module load " + dep_module + "\n"
+        elif queue_type == "slurm":
+            line += "#SBATCH -J " + self.jobname_lat + "\n"
+            line += "#SBATCH -t " + self.runtime + "\n"
+            line += "#SBATCH -o " + \
+                common.cleanup_path(
+                    self.latpath + "/" + self.jobname_lat) + ".output" + "\n"
+            line += "#SBATCH -e " + \
+                common.cleanup_path(
+                    self.latpath + "/" + self.jobname_lat) + ".error" + "\n"
+            if self.account is not None:
+                line += "#SBATCH -A {0}".format(self.account) + "\n"
 
         self.use_module = False
         if self.slurm_options is not None:

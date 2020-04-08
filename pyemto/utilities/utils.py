@@ -15,7 +15,7 @@ import sys
 import numpy as np
 
 
-def run_emto(name, folder="./"):
+def run_emto(name, folder="./", queue_type="pbs"):
     """Submits a batch script to the queue.
 
     Finds all the files in a folder that start with the name
@@ -36,7 +36,10 @@ def run_emto(name, folder="./"):
         if fltest.endswith('.' + filetype) and fltest.startswith(name):
             namelist.append(os.path.splitext(fltest)[0])
     for jobname in namelist:
-        run_job = 'cd {0};sbatch {1}.{2}'.format(folder, jobname, filetype)
+        if queue_type == "pbs":
+            run_job = 'cd {0};qsub {1}.{2}'.format(folder, jobname, filetype)
+        elif queue_type == "slurm":
+            run_job = 'cd {0};sbatch {1}.{2}'.format(folder, jobname, filetype)
         jobid = 0
         jobid_raw = run_bash(run_job)
         print(jobid_raw)
@@ -64,7 +67,8 @@ def run_bash(cmd):
     return out  # This is the stdout from the shell command
 
 
-def write_batch(folder, jobname):
+def write_batch(folder, jobname, queue_type="pbs", 
+                 pbs_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
     """
 
     :param folder: Folder to write batch file
@@ -76,13 +80,27 @@ def write_batch(folder, jobname):
     """
 
     # Writes a SLURM batch script for the job
-    line = "#!/bin/bash" + "\n"
-    line = line + "\n"
-    line = line + "#SBATCH -J {0}".format(jobname) + "\n"
-    line = line + "#SBATCH -t 01:00:00" + "\n"
-    line = line + "#SBATCH -o {0}.output".format(jobname) + "\n"
-    line = line + "#SBATCH -e {0}.error".format(jobname) + "\n"
-    line = line + "\n"
+    line = "#!/bin/bash" + "\n" + "\n"
+    if queue_type == "pbs":
+            line += "#PBS -N " + self.jobname + "\n"
+            line += "#PBS -l nodes=1:ppn=1\n"
+            line += "#PBS -l walltime=" + self.runtime + "\n"
+            line += "#PBS -l pmem=" + pbs_options["pmem"] + "\n"
+            line += "#PBS -A {0}".format(self.account) + "\n"
+            line += "#PBS -q open\n"
+            line += "#PBS -o {0}.output".format(jobname) + "\n"
+            line += "#PBS -e {0}.error".format(jobname) + "\n"
+            line += "\n"
+            line += "cd $PBS_O_WORKDIR"
+            line += "\n"
+            for dep_module in pbs_options["module"]:
+                line += "module load " + dep_module + "\n"
+    elif queue_type == "slurm":
+        line = line + "#SBATCH -J {0}".format(jobname) + "\n"
+        line = line + "#SBATCH -t 01:00:00" + "\n"
+        line = line + "#SBATCH -o {0}.output".format(jobname) + "\n"
+        line = line + "#SBATCH -e {0}.error".format(jobname) + "\n"
+        line = line + "\n"
     line = line + "python -u {0}.py".format(jobname) + "\n"
 
     fln = open("{0}/{1}.cmd".format(folder, jobname), "w")
@@ -140,6 +158,8 @@ def submit_to_batch(folder, jobname, system='slurm'):
     if system == 'slurm':
         command = "cd {0};sbatch {0}/{1}.cmd".format(folder, jobname)
         os.system(command)
+    elif system == 'pbs':
+        command = "cd {0};qsub {0}/{1}.cmd".format(folder, jobname)
     else:
         sys.exit('Only SLURM has been implemented so far! Exiting.')
 
