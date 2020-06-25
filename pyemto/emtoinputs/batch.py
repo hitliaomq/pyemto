@@ -140,7 +140,7 @@ class Batch:
         else:
             common.check_folders(folder)
 
-        fl = open(folder + '/{0}.sh'.format(self.jobname), "w")
+        fl = open(folder + '/{0}.'.format(self.jobname) + self.queue_type, "w")
         fl.write(self.output())
         fl.close()
         return

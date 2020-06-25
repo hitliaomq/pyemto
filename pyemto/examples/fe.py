@@ -40,4 +40,4 @@ fe.lattice_constants_batch_generate(sws=sws)
 #fe.lattice_constants_analyze(sws=sws)
 
 # This function combines the features of the previous two:
-#fe.lattice_constants_batch_calculate(sws=sws)
+fe.lattice_constants_batch_calculate(sws=sws)

@@ -13,8 +13,8 @@ import os
 import pyemto.common.common as common
 from monty.os.path import which
 
-def batch_head(jobname, latpath="./", runtime="24:00:00", account="open", queue_type="pbs", 
-    queue_options={"node": 1, "ncore": 24, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
+def batch_head(jobname, latpath="./", runtime="12:00:00", account="open", queue_type="pbs", 
+    queue_options={"node": 1, "ncore": 1, "pmem": "8gb", "module": ["intel/16.0.3", "mkl"]}):
     
     line = "#!/bin/bash" + "\n" + "\n"
     if queue_type == "pbs":
@@ -179,7 +179,7 @@ class Batch:
         else:
             common.check_folders(folder)
 
-        fl = open(folder + '/{0}.sh'.format(self.jobname_lat), "w")
+        fl = open(folder + '/{0}.'.format(self.jobname_lat) + self.queue_type, "w")
         fl.write(self.output())
         fl.close()
 
